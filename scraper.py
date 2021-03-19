@@ -1,11 +1,8 @@
 import requests
 import re
 from bs4 import BeautifulSoup
-
-
-def get_converted_price(price):
-    converted_price = float(re.sub(r"[^\d.]", "", price))
-    return converted_price
+import time
+import json
 
 
 def extract_url(url):
@@ -26,32 +23,68 @@ def extract_url(url):
         url = None
     return url
 
+def get_converted_price(price):
+    converted_price = float(re.sub(r"[^\d.]", "", price))
+    return converted_price
 
-def get_product_details(url):
-
+def get_page_soup(clean_url):
     headers = {
         "User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:68.0) Gecko/20100101 Firefox/68.0"
     }
-    details = {"name": "", "price": 0, "deal": True, "url": ""}
+    page = requests.get(clean_url, headers=headers)
+    return BeautifulSoup(page.content, "html5lib")
+
+def extract_amazon_data(url):
+    
+    details = {"name": "", "price": 0, "deal": True, "url": "",'website':'amazon'}
     _url = extract_url(url)
-    if _url is None:
-        details = None
-    else:
-        page = requests.get(_url, headers=headers)
-        soup = BeautifulSoup(page.content, "html5lib")
-        title = soup.find(id="productTitle")
-        price = soup.find(id="priceblock_dealprice")
-        if price is None:
-            price = soup.find(id="priceblock_ourprice")
-            details["deal"] = False
-        if title is not None and price is not None:
-            details["name"] = title.get_text().strip()
-            details["price"] = get_converted_price(price.get_text())
-            details["url"] = _url
-        else:
-            details = None
+    soup = get_page_soup(_url)
+    title = soup.find(id="productTitle")
+    price = soup.find(id="priceblock_dealprice")
+    if price is None:
+        price = soup.find(id="priceblock_ourprice")
+        details["deal"] = False
+    if title is not None and price is not None:
+        details["name"] = title.get_text().strip()
+        details["price"] = get_converted_price(price.get_text())
+        details["url"] = _url
     return details
 
-print(get_product_details("https://www.amazon.in/Test-Exclusive-521/dp/B077Q42J32/ref=br_msw_pdt-2?_encoding=UTF8&smid=A14CZOWI0VEHLG&pf_rd_m=A1VBAL9TL5WCBF&pf_rd_s=&pf_rd_r=RSHQJHF4YH8ZQJJRNXH3&pf_rd_t=36701&pf_rd_p=9806b2c4-09c8-4373-b954-bae25b7ea046&pf_rd_i=desktop"))
-print(get_product_details("https://www.amazon.in/gp/product/B00IJRV2D0?pf_rd_p=f2b20090-067d-415f-953d-b8dcecc9109f&pf_rd_r=VFJ98F93X80YWYQNR3GN"))
-print(get_product_details("https://www.amazon.com/YI-1080P60-Dashboard-G-Sensor-Recording/dp/B01C89GCHU/ref=br_asw_pdt-3?pf_rd_m=ATVPDKIKX0DER&pf_rd_s=&pf_rd_r=ZRGF7W6FRMPM7YHH4ENK&pf_rd_t=36701&pf_rd_p=143861b7-0857-4329-b93d-3eeedb5f1ea9&pf_rd_i=desktop"))
+def  extract_myntra_data(url):
+    details = {"name": "", "price": 0, "deal": False, "url": "",'website':'myntra'}
+    headers = {'User-Agent' : 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/84.0.4147.89 Safari/537.36'}
+    s = requests.Session()
+    res = s.get(url, headers=headers)
+    soup = BeautifulSoup(res.text,"lxml")
+    script = None
+    for s in soup.find_all("script"):
+        if 'pdpData' in s.text:
+            script = s.get_text(strip=True)
+            break
+    datadict = json.loads(script[script.index('{'):])
+    if datadict['pdpData'].get('price').get('discounted'):
+        details['price'] = datadict['pdpData'].get('price').get('discounted') 
+        details['deal'] = True
+    else:
+        details['price'] =datadict['pdpData'].get('price').get('mrp')
+    details['name'] = datadict['pdpData'].get('name')
+    details['url'] = url.split('?')[0]
+    return details
+
+def extract_flipkart_data(url):
+    details = {"name": "", "price": 0, "deal": False, "url": "",'website':'flipkart'}
+    headers = {
+        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:68.0) Gecko/20100101 Firefox/68.0"
+    }
+    page = requests.get(url, headers=headers)
+    soup = BeautifulSoup(page.content, "html5lib")
+    title = soup.find('h1',{'class':'yhB1nd'}).span
+    price = soup.find('div',{'class':'_30jeq3 _16Jk6d'})
+    offer_text = soup.find('div',{'class':'_1V_ZGU'}).span.text
+    if 'special' in offer_text.lower():
+        details["deal"] = True
+    if title is not None and price is not None:
+        details["name"] = title.get_text().strip()
+        details["price"] = get_converted_price(price.get_text())
+        details["url"] = url.split('?')[0]
+    return details
