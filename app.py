@@ -10,14 +10,27 @@ import json
 from datetime import datetime
 from send_mail import post
 
+
+page_bg_img = '''
+<style>
+section.main {
+background-image: url("https://wallpaperaccess.com/full/1841209.jpg");
+background-size: cover;
+}
+</style>
+'''
+
+st.markdown(page_bg_img, unsafe_allow_html=True)
+
 st.header("Product Price Tracking Automated System")
-st.sidebar.title('Final yr. project at AMITY')
+st.sidebar.title('Final Year Project ')
 
 # connect to database
 engine = create_engine('sqlite:///trackdb.sqlite3')
 Session = sessionmaker(bind=engine)
 sess = Session()
 st.sidebar.success('database connected')
+mail_addr = st.sidebar.text_input('Enter email to recieve price notification',key='email')
   
 
 st.title('Instructions')
@@ -26,6 +39,8 @@ st.write('https://www.amazon.in/')
 
 plot_area = st.empty()
 data_area = st.empty()
+data = None
+
 
 product_name = st.text_input('enter the product name to show')
 amz_urls = st.text_input('Enter url for amazon')
@@ -49,7 +64,7 @@ if (amz_urls or flip_urls or  myn_urls) and btn:
     st.write(pd.DataFrame(df))
 
 st.subheader('Run Tracker ')
-time_gap = st.select_slider("How Much time difference between each tracking call",['10 sec','10 mins','1 hour','12 hours','1 day'])
+time_gap = st.select_slider("How Much time difference between each tracking call",['No delay','10 sec','10 mins','1 hour','12 hours','1 day'])
 btn2 = st.button('Run Tracker continously')
 if (amz_urls or flip_urls or  myn_urls) and btn2:
     if time_gap == '10 sec':
@@ -62,6 +77,8 @@ if (amz_urls or flip_urls or  myn_urls) and btn2:
         wait = 60 * 60 * 12
     elif time_gap == '1 day':
         wait = 60 * 60 * 24
+    elif time_gap == 'No delay':
+        wait = 0
     else:
         wait = 5
 
@@ -111,6 +128,25 @@ if (amz_urls or flip_urls or  myn_urls) and btn2:
         plot_area.subheader('graphical output')
         plot_area.plotly_chart(fig)
         data_area.write(data)
+        if mail_addr and data.shape[0]>=12:
+            lowest_value = 0
+            amzdata = data[data.website=='amazon']    
+            flipkartdata = data[data.website=='flipkart']    
+            myntradata = data[data.website=='myntra']
+            if amz_urls:
+                if amzdata.iloc[-1]['price'] < amzdata.iloc[-2]['price']:
+                    if post(mail_addr,amz_urls,product_name,amzdata.iloc[-1]['price'],amzdata.iloc[-1]['website']):
+                        st.success('Price fell at amazon , mail notification sent to {mail_addr}')  
+            if flip_urls:
+                if flipkartdata.iloc[-1]['price'] < flipkartdata.iloc[-2]['price']:
+                    if post(mail_addr,flip_urls,product_name,flipkartdata.iloc[-1]['price'],flipkartdata.iloc[-1]['website']):
+                        st.success('Price fell at flipkart , mail notification sent to {mail_addr}')  
+             
+            if myn_urls:
+                if myntradata.iloc[-1]['price'] < myntradata.iloc[-2]['price']:
+                    if post(mail_addr,myn_urls,product_name,myntradata.iloc[-1]['price'],myntradata.iloc[-1]['website']):
+                        st.success('Price fell at myntra , mail notification sent to {mail_addr}')  
+              
         time.sleep(wait)
 
 op = st.sidebar.checkbox("show tracked product data manually")
@@ -120,4 +156,7 @@ if op:
         st.write(df)
     except Exception as e:
         st.error('No tracking data available')
+
+
+
 

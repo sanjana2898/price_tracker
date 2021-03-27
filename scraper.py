@@ -78,13 +78,19 @@ def extract_flipkart_data(url):
     }
     page = requests.get(url, headers=headers)
     soup = BeautifulSoup(page.content, "html5lib")
-    title = soup.find('h1',{'class':'yhB1nd'}).span
-    price = soup.find('div',{'class':'_30jeq3 _16Jk6d'})
-    offer_text = soup.find('div',{'class':'_1V_ZGU'}).span.text
-    if 'special' in offer_text.lower():
-        details["deal"] = True
+    
+        
+    try:
+        title = soup.find('h1',{'class':'yhB1nd'}).span
+        price = soup.find('div',{'class':'_30jeq3 _16Jk6d'})
+        offer_text = soup.find('div',{'class':'_1V_ZGU'}).span.text
+        if 'special' in offer_text.lower():
+            details["deal"] = True
+    except:
+        details['deal'] = False
     if title is not None and price is not None:
         details["name"] = title.get_text().strip()
         details["price"] = get_converted_price(price.get_text())
         details["url"] = url.split('?')[0]
+
     return details
